@@ -32,18 +32,18 @@ class Block(nn.Module):
         return x
 
 class ResnetBlock(nn.Module):
-    def __init__(self, dim, dim_out, *, time_emb_dim=None, groups=8):
+    def __init__(self, dim, dim_out, *, time_cond_emb_dim=None, groups=8):
         super().__init__()
-        self.mlp = (nn.Sequential(nn.SiLU(), nn.Linear(time_emb_dim, dim_out * 2))
-                    if exists(time_emb_dim) else None)
+        self.mlp = (nn.Sequential(nn.SiLU(), nn.Linear(time_cond_emb_dim, dim_out * 2))
+                    if exists(time_cond_emb_dim) else None)
         self.block1 = Block(dim, dim_out, groups=groups)
         self.block2 = Block(dim_out, dim_out, groups=groups)
         self.res_conv = nn.Conv2d(dim, dim_out, 1) if dim != dim_out else nn.Identity()
 
-    def forward(self, x, time_emb=None):
+    def forward(self, x, time_cond_emb=None):
         scale_shift = None
-        if exists(self.mlp) and exists(time_emb):
-            time_emb = self.mlp(time_emb)
+        if exists(self.mlp) and exists(time_cond_emb):
+            time_emb = self.mlp(time_cond_emb)
             time_emb = rearrange(time_emb, "b c -> b c 1 1")
             scale_shift = time_emb.chunk(2, dim=1)
 
@@ -115,7 +115,7 @@ class PreNorm(nn.Module):
 
 
 class Unet(nn.Module):
-    def __init__(self, dim, init_dim=None, out_dim=None, dim_mults=(1, 2, 4, 8),
+    def __init__(self, dim, cond_dim=16, init_dim=None, out_dim=None, dim_mults=(1, 2, 4, 8),
                  channels=3, self_condition=False, resnet_block_groups=4):
         super().__init__()
         self.channels = channels
@@ -134,14 +134,14 @@ class Unet(nn.Module):
         time_dim = dim * 4
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(dim),
-            nn.Linear(dim, time_dim),
+            nn.Linear(dim, time_dim / 2),
             nn.GELU(),
-            nn.Linear(time_dim, time_dim),
+            nn.Linear(time_dim, time_dim / 2),
         )
 
         # condition embeddings
-        # self.cond_dim = cond_dim
-        # self.cond_emb_layer = nn.Embedding(cond_dim, time_dim)
+        self.cond_dim = cond_dim
+        self.cond_emb_layer = nn.Embedding(cond_dim, time_dim / 2)
 
         # layers
         self.downs = nn.ModuleList([])
@@ -195,32 +195,34 @@ class Unet(nn.Module):
         x = self.init_conv(x)
         r = x.clone()
         t = self.time_mlp(time)
+        c = self.cond_emb_layer(condition)
+        tc = torch.cat((t, c), dim=-1)
         h = []
 
         for block1, block2, attn, downsample in self.downs:
-            x = block1(x, t)
+            x = block1(x, tc)
             h.append(x)
 
-            x = block2(x, t)
+            x = block2(x, tc)
             x = attn(x)
             h.append(x)
 
             x = downsample(x)
 
-        x = self.mid_block1(x, t)
+        x = self.mid_block1(x, tc)
         x = self.mid_attn(x)
-        x = self.mid_block2(x, t)
+        x = self.mid_block2(x, tc)
 
         for block1, block2, attn, upsample in self.ups:
             x = torch.cat((x, h.pop()), dim=1)
-            x = block1(x, t)
+            x = block1(x, tc)
 
             x = torch.cat((x, h.pop()), dim=1)
-            x = block2(x, t)
+            x = block2(x, tc)
             x = attn(x)
 
             x = upsample(x)
 
         x = torch.cat((x, r), dim=1)
-        x = self.final_res_block(x, t)
+        x = self.final_res_block(x, t, c)
         return self.final_conv(x)

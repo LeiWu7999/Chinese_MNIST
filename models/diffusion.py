@@ -52,6 +52,8 @@ class DiffusionModel(nn.Module):
 
         return loss
 
+
+    @torch.no_grad()
     def p_sample(self, x_t, t, c, w):
 
         conditional_noise = self.net(x_t,t,c)
