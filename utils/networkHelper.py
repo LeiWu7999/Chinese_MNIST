@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 import math
+import torch.nn.functional as F
+from tqdm.auto import tqdm
 from inspect import isfunction
 from einops.layers.torch import Rearrange
 import IPython

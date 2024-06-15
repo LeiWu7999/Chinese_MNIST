@@ -192,12 +192,13 @@ class SimpleDiffusionTrainer(TrainerBase):
 
                     samples = model(mode="infer", img_size=self.img_size,
                                     batch_size=batch_size, channels=self.channels, c=c, w=self.w)
+                    sample = samples[-1]
                     if self.transform:
                         # 逆归一化
                         inverse_transform = transforms.Compose([
                             transforms.Normalize(mean=[-1], std=[2])  # 逆归一化公式
                         ])
-                        samples = inverse_transform(torch.from_numpy(samples))
+                        sample = inverse_transform(torch.from_numpy(sample))
 
                     if args.save:
                         save_image(samples, str(Path(self.saved_dir) / f'sample-{milestone}.png'), nrow=6)

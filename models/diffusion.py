@@ -125,7 +125,7 @@ class DiffusionModel(nn.Module):
 
                 for i in tqdm(reversed(range(0, self.timesteps)), desc='Sampling loop', total=self.timesteps):
                     img = self.p_sample(img, torch.full((batch_size,), i, device=self.device, dtype=torch.long), c, w)
-                    imgs.append(img.cpu().numpy())
+                    imgs.append(img.cpu())
                 return imgs
         else:
             raise ValueError("mode must be 'train' or 'infer'")

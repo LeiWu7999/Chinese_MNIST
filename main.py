@@ -88,21 +88,26 @@ def main(args):
         labels = torch.randint(0, 17, size=(sample_batch_size,), dtype=torch.long, device=device)
 
         samples = Model(mode="infer", img_size=img_size, batch_size=sample_batch_size, channels=channels, c=labels, w=w)
-
+        sample = samples[-1]
         # 随机挑一张显示
         random_index = 1
-        generated_image = samples[-1][random_index].reshape(img_size, img_size, channels)
+        generated_image = samples[-1][random_index].numpy().reshape(img_size, img_size, channels)
         plt.imshow(generated_image, cmap='gray')
+        plt.show()
 
         if transform:
             # 逆归一化
             inverse_transform = transforms.Compose([
                 transforms.Normalize(mean=[-1], std=[2])  # 逆归一化公式
             ])
-            samples = inverse_transform(torch.from_numpy(samples))
+            sample = inverse_transform(sample)
 
         if args.save:
-            save_image(samples, str(Path(saved_path) / f'samples.png'), nrow=6)
+            save_image(sample, str(Path(saved_path) / f'samples.png'), nrow=6)
+            labels_path = str(Path(saved_path) / 'labels.txt')
+            with open(labels_path, 'w') as f:
+                for label in labels:
+                    f.write(f"{label.item()}\n")
 
 
 if __name__ == '__main__':
