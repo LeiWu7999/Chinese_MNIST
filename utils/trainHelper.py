@@ -200,8 +200,7 @@ class SimpleDiffusionTrainer(TrainerBase):
                         ])
                         sample = inverse_transform(torch.from_numpy(sample))
 
-                    if args.save:
-                        save_image(samples, str(Path(self.saved_dir) / f'sample-{milestone}.png'), nrow=6)
+                    save_image(samples, str(Path(self.saved_dir) / f'sample-{milestone}.png'), nrow=6)
 
         if "model_save_path" in kwargs.keys():
             self.save_best_model(model=model, path=kwargs["model_save_path"])

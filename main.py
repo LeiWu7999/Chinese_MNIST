@@ -27,14 +27,15 @@ def main(args):
     num_labels = 17  # 总共16个字，外加一个表示无标签的情况
     timesteps = 1000  # 采样步数
     lr = 1e-3   # 学习率
-    loss_type = "huber" # l1 or l2 or huber
+    loss_type = "l2"  # l1 or l2 or huber
     w = 4  # 条件强度，w越大图像越贴合标签，但多样性降低
     p_unconditional = 0.1  # 训练时以0.1的概率使用无标签训练
     epoches = 20
-    transform = False  # 是否对图像进行预处理
-    var_scheduler = "linear_beta_schedule"  # 扩散过程设方差设置策略
-    dim_mults = (1, 2, 4, 8)  # U-Net 上下采样缩放比例，如降采样阶段：(1,2,4,8)->图像尺寸:(不变,减半,减四倍,减八倍)
-    save_and_sample_every = 1000 # 训练过程中每过多少步采样一次图片
+    transform = True  # 是否对图像进行预处理
+    var_scheduler = "cosine_beta_schedule"  # 扩散过程设方差设置策略
+    dim_mults = (1, 1, 2,)  # U-Net 上下采样缩放比例，如降采样阶段：(1,2,4,8)->图像尺寸:(不变,减半,减四倍,减八倍)
+    save_and_sample_every = 1000  # 训练过程中每过多少步采样一次图片
+    net_dim = 64  # denoise_model dim
     """
     -------------------------------------------Tuning hyperparameters above---------------------------------------------
     """
@@ -46,7 +47,7 @@ def main(args):
                             num_workers=1)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    denoise_model = Unet(dim=img_size,
+    denoise_model = Unet(dim=net_dim,
                          cond_dim=num_labels,
                          channels=channels,
                          dim_mults=dim_mults)
@@ -69,7 +70,8 @@ def main(args):
                                      img_size=img_size,
                                      channels=channels,
                                      w=w,
-                                     transform=transform)
+                                     transform=transform,
+                                     loss_type=loss_type)
 
     model_dir = "./ckpt"
     setting = "imageSize{}_channels{}_dimMults{}_timeSteps{}_scheduleName{}".format(img_size, channels, dim_mults,
