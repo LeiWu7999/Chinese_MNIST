@@ -153,7 +153,7 @@ class SimpleDiffusionTrainer(TrainerBase):
         self.channels = kwargs.get("channels", 1)
         self.w = kwargs.get("w", 0.)
         self.transform = kwargs.get("transform", False)
-
+        self.loss_type = kwargs.get("loss_type", "l2")
         results_folder = Path("./training_samples")
         results_folder.mkdir(exist_ok=True)
         self.saved_dir = results_folder
@@ -174,7 +174,7 @@ class SimpleDiffusionTrainer(TrainerBase):
                 # Algorithm 1 line 3: sample t uniformally for every example in the batch
                 t = torch.randint(0, self.timesteps, (batch_size,), device=self.device).long()
 
-                loss = model(mode="train", x_0=features, t=t, c=labels, loss_type="l2", p_unconditional=p_unconditional)
+                loss = model(mode="train", x_0=features, t=t, c=labels, loss_type=self.loss_type, p_unconditional=p_unconditional)
                 losses.append(loss)
 
                 loss.backward()

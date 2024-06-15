@@ -27,6 +27,7 @@ def main(args):
     num_labels = 17  # 总共16个字，外加一个表示无标签的情况
     timesteps = 1000  # 采样步数
     lr = 1e-3   # 学习率
+    loss_type = "huber" # l1 or l2 or huber
     w = 4  # 条件强度，w越大图像越贴合标签，但多样性降低
     p_unconditional = 0.1  # 训练时以0.1的概率使用无标签训练
     epoches = 20

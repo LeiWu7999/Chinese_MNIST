@@ -47,6 +47,8 @@ class DiffusionModel(nn.Module):
             loss = F.l1_loss(noise, predicted_noise)
         elif loss_type == 'l2':
             loss = F.mse_loss(noise, predicted_noise)
+        elif loss_type == 'huber':
+            loss = F.smooth_l1_loss(noise, predicted_noise)
         else:
             raise NotImplementedError()
 
