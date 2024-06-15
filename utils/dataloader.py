@@ -1,13 +1,12 @@
 import os
 from PIL import Image
-import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torchvision import transforms
 import IPython
 e = IPython.embed
 
 
-class Chinese_MNIST(DataLoader):
+class Chinese_MNIST(Dataset):
     def __init__(self, root_dir, transform=False):
         self.root_dir = root_dir
         self.image_paths = []

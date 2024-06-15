@@ -3,6 +3,9 @@ import torch.nn as nn
 import numpy as np
 from tqdm.auto import tqdm
 import IPython
+from torchvision import transforms
+from torchvision.utils import save_image
+from pathlib import Path
 e = IPython.embed
 
 class EarlyStopping:
@@ -145,28 +148,59 @@ class SimpleDiffusionTrainer(TrainerBase):
         else:
             raise ValueError("扩散模型训练必须提供扩散步数参数")
 
+        self.save_and_sample_every = kwargs.get("save_and_sample_every", 1000)
+        self.img_size = kwargs.get("img_size", 64)
+        self.channels = kwargs.get("channels", 1)
+        self.w = kwargs.get("w", 0.)
+        self.transform = kwargs.get("transform", False)
+
+        results_folder = Path("./training_samples")
+        results_folder.mkdir(exist_ok=True)
+        self.saved_dir = results_folder
+
     def forward(self, model, *args, **kwargs):
+
+        p_unconditional = kwargs.get("p_unconditional", 0.1)
 
         for i in range(self.epoches):
             losses = []
             loop = tqdm(enumerate(self.train_loader), total=len(self.train_loader))
             for step, (features, labels) in loop:
+                self.optimizer.zero_grad()
+
                 features = features.to(self.device)
                 batch_size = features.shape[0]
 
                 # Algorithm 1 line 3: sample t uniformally for every example in the batch
                 t = torch.randint(0, self.timesteps, (batch_size,), device=self.device).long()
 
-                loss = model(mode="train", x_0=features, t=t, c=labels, loss_type="l2")
+                loss = model(mode="train", x_0=features, t=t, c=labels, loss_type="l2", p_unconditional=p_unconditional)
                 losses.append(loss)
 
-                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
                 # 更新信息
                 loop.set_description(f'Epoch [{i}/{self.epoches}]')
                 loop.set_postfix(loss=loss.item())
+
+                # 保存图像
+                if step != 0 and step % self.save_and_sample_every == 0:
+                    milestone = step // self.save_and_sample_every
+                    batch_size = 4
+                    c = torch.randint(0, 17, (batch_size,), device=self.device, dtype=torch.long)
+
+                    samples = model(mode="infer", img_size=self.img_size,
+                                    batch_size=batch_size, channels=self.channels, c=c, w=self.w)
+                    if self.transform:
+                        # 逆归一化
+                        inverse_transform = transforms.Compose([
+                            transforms.Normalize(mean=[-1], std=[2])  # 逆归一化公式
+                        ])
+                        samples = inverse_transform(torch.from_numpy(samples))
+
+                    if args.save:
+                        save_image(samples, str(Path(self.saved_dir) / f'sample-{milestone}.png'), nrow=6)
 
         if "model_save_path" in kwargs.keys():
             self.save_best_model(model=model, path=kwargs["model_save_path"])

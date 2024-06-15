@@ -2,7 +2,6 @@ from functools import partial
 from einops import rearrange, reduce
 
 from torch import nn, einsum
-import torch.nn.functional as F
 from utils.networkHelper import *
 
 class WeightStandardizedConv2d(nn.Conv2d):

@@ -1,97 +1,115 @@
 import os
-import numpy as np
-import torchvision
-import torch
+import argparse
 import torchvision.transforms as transforms
+from torchvision.utils import save_image
+from matplotlib import pyplot as plt
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from pathlib import Path
 
 from utils.networkHelper import *
-
 from models.diffusion import DiffusionModel
 from models.unet import Unet
 from utils.dataloader import Chinese_MNIST
 from utils.trainHelper import SimpleDiffusionTrainer
 
-root_dir = os.path.abspath(os.path.dirname(__file__))
-image_dir = os.path.join(root_dir, 'dataset\\data')
 
-"""
-Tuning hyperparameters here
-"""
-img_size = 64
-channels = 1
-batch_size = 64
-num_labels = 17
-timesteps = 1000
-lr = 1e-3
-w = 4
-epoches = 20
-transform = False
-var_scheduler = "linear_beta_schedule"
+def main(args):
+    root_dir = os.path.abspath(os.path.dirname(__file__))
 
-dataset = Chinese_MNIST(root_dir, transform=transform)
-dataloader = DataLoader(dataset,
-                        batch_size=batch_size,
-                        shuffle=True,
-                        num_workers=1)
-device = "cuda" if torch.cuda.is_available() else "cpu"
-dim_mults = (1, 2, 4, 8)
+    """
+    -------------------------------------------Tuning hyperparameters here----------------------------------------------
+    """
+    img_size = 64
+    channels = 1
+    batch_size = 64
+    sample_batch_size = 32
+    num_labels = 17  # 总共16个字，外加一个表示无标签的情况
+    timesteps = 1000  # 采样步数
+    lr = 1e-3   # 学习率
+    w = 4  # 条件强度，w越大图像越贴合标签，但多样性降低
+    p_unconditional = 0.1  # 训练时以0.1的概率使用无标签训练
+    epoches = 20
+    transform = False  # 是否对图像进行预处理
+    var_scheduler = "linear_beta_schedule"  # 扩散过程设方差设置策略
+    dim_mults = (1, 2, 4, 8)  # U-Net 上下采样缩放比例，如降采样阶段：(1,2,4,8)->图像尺寸:(不变,减半,减四倍,减八倍)
+    save_and_sample_every = 1000 # 训练过程中每过多少步采样一次图片
+    """
+    -------------------------------------------Tuning hyperparameters above---------------------------------------------
+    """
 
-denoise_model = Unet(dim=img_size,
-                     cond_dim=num_labels,
-                     channels=channels,
-                     dim_mults=dim_mults)
+    dataset = Chinese_MNIST(root_dir, transform=transform)
+    dataloader = DataLoader(dataset,
+                            batch_size=batch_size,
+                            shuffle=True,
+                            num_workers=1)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-Model = DiffusionModel(var_schedule=var_scheduler,
-                       timesteps=timesteps,
-                       beta_start=0.0001,
-                       beta_end=0.02,
-                       device=device,
-                       denoise_model=denoise_model).to(device)
+    denoise_model = Unet(dim=img_size,
+                         cond_dim=num_labels,
+                         channels=channels,
+                         dim_mults=dim_mults)
 
-optimizer = Adam(Model.parameters(), lr=lr)
+    Model = DiffusionModel(var_schedule=var_scheduler,
+                           timesteps=timesteps,
+                           beta_start=0.0001,
+                           beta_end=0.02,
+                           device=device,
+                           denoise_model=denoise_model).to(device)
 
-Trainer = SimpleDiffusionTrainer(epoches=epoches,
-                                 train_loader=dataloader,
-                                 optimizer=optimizer,
-                                 device=device,
-                                 timesteps=timesteps)
+    optimizer = Adam(Model.parameters(), lr=lr)
 
-root_path = "./ckpt"
-setting = "imageSize{}_channels{}_dimMults{}_timeSteps{}_scheduleName{}".format(img_size, channels, dim_mults, timesteps, var_scheduler)
+    Trainer = SimpleDiffusionTrainer(epoches=epoches,
+                                     train_loader=dataloader,
+                                     optimizer=optimizer,
+                                     device=device,
+                                     timesteps=timesteps,
+                                     save_and_sample_every=save_and_sample_every,
+                                     img_size=img_size,
+                                     channels=channels,
+                                     w=w,
+                                     transform=transform)
 
-saved_path = os.path.join(root_path, setting)
-if not os.path.exists(saved_path):
-    os.makedirs(saved_path)
+    model_dir = "./ckpt"
+    setting = "imageSize{}_channels{}_dimMults{}_timeSteps{}_scheduleName{}".format(img_size, channels, dim_mults,
+                                                                                    timesteps, var_scheduler)
 
-# 训练好的模型加载，如果模型是已经训练好的，则可以将下面两行代码取消注释
-best_model_path = saved_path + '/' + 'BestModel.pth'
-Model.load_state_dict(torch.load(best_model_path))
+    saved_path = os.path.join(model_dir, setting)
+    if not os.path.exists(saved_path):
+        os.makedirs(saved_path)
 
-# 如果模型已经训练好则注释下面这行代码，反之则注释上面两行代码
-# Model = Trainer(Model, model_save_path=saved_path)
+    if args.mode == 'train':
+        Model = Trainer(Model, p_unconditional=p_unconditional, model_save_path=saved_path)
 
-labels = torch.randint(0, 16, size=(64,))
+    elif args.mode == 'infer':
+        best_model_path = saved_path + '/' + 'BestModel.pth'
+        Model.load_state_dict(torch.load(best_model_path))
 
-samples = Model(mode="infer", img_size=img_size, batch_size=64, channels=channels, c=labels, w=w)
+        labels = torch.randint(0, 17, size=(sample_batch_size,), dtype=torch.long, device=device)
 
-# 随机挑一张显示
-random_index = 1
-generated_image = samples[-1][random_index].reshape(img_size, img_size, channels)
+        samples = Model(mode="infer", img_size=img_size, batch_size=sample_batch_size, channels=channels, c=labels, w=w)
 
-if transform:
-    # 逆归一化
-    inverse_transform = transforms.Compose([
-        transforms.Normalize(mean=[-1], std=[2])  # 逆归一化公式
-    ])
-    generated_image = inverse_transform(torch.from_numpy(generated_image))
+        # 随机挑一张显示
+        random_index = 1
+        generated_image = samples[-1][random_index].reshape(img_size, img_size, channels)
+        plt.imshow(generated_image, cmap='gray')
 
-# 转换为 PIL 图像
-to_pil = transforms.ToPILImage()
-generated_image_pil = to_pil(generated_image)
+        if transform:
+            # 逆归一化
+            inverse_transform = transforms.Compose([
+                transforms.Normalize(mean=[-1], std=[2])  # 逆归一化公式
+            ])
+            samples = inverse_transform(torch.from_numpy(samples))
 
-generated_image_pil.show()
+        if args.save:
+            save_image(samples, str(Path(saved_path) / f'samples.png'), nrow=6)
 
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-mode", choices=["train", "infer"], required=True,
+                        help="Choose whether to train the model or run inference.")
+    parser.add_argument("-save", action="store_true", help="Save the generated images during inference.")
+    args = parser.parse_args()
+    main(args)
 

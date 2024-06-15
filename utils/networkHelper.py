@@ -1,19 +1,18 @@
 import torch
 from torch import nn
 import math
-import torch.nn.functional as F
-from tqdm.auto import tqdm
 from inspect import isfunction
 from einops.layers.torch import Rearrange
-from torchvision.transforms import Compose, Lambda, ToPILImage
 import IPython
 e = IPython.embed
+
 
 def extract(tensor, idx, x_shape):
     # 从tensor最后一维中索引idx对应元素
     batch_size = idx.shape[0]
     out = tensor.gather(-1, idx.cpu())
     return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(idx.device)
+
 
 def exists(x):
     """
@@ -22,6 +21,7 @@ def exists(x):
     :return: 如果不为空则True 反之则返回False
     """
     return x is not None
+
 
 def default(val, d):
     """
@@ -35,6 +35,7 @@ def default(val, d):
     if exists(val):
         return val
     return d() if isfunction(d) else d
+
 
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(self, dim):
@@ -73,9 +74,18 @@ def Downsample(dim_in, dim_out=None):
         nn.Conv2d(dim_in * 4, default(dim_out, dim_in), kernel_size=1),
     )
 
+
 def Upsample(dim_in, dim_out=None):
     return nn.Sequential(
         nn.Upsample(scale_factor=2, mode='nearest'),
         nn.Conv2d(dim_in, default(dim_out, dim_in), 3, padding=1),
     )
 
+
+def num_to_groups(num, divisor):
+    groups = num // divisor
+    reminder = num % divisor
+    arr = [divisor] * groups
+    if reminder > 0:
+        arr.append(reminder)
+    return arr

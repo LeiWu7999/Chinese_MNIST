@@ -56,9 +56,9 @@ class DiffusionModel(nn.Module):
     @torch.no_grad()
     def p_sample(self, x_t, t, c, w):
 
-        conditional_noise = self.net(x_t,t,c)
+        conditional_noise = self.net(x_t, t, c)
         cnone = torch.ones_like(c) * 16
-        unconditional_noise = self.net(x_t,t,cnone)
+        unconditional_noise = self.net(x_t, t, cnone)
         predicted_noise = (1+w) * conditional_noise - w * unconditional_noise
 
         betas_t = extract(self.betas, t, x_t.shape)
@@ -119,13 +119,12 @@ class DiffusionModel(nn.Module):
                     raise ValueError("img_size , batch_size , channels must be specified for generating.")
 
                 w = kwargs.get("w", 0.)
-                c_copy = c.clone().long().to(self.device)
 
                 img = torch.randn((batch_size, channels, img_size, img_size), device=self.device)
                 imgs = []
 
                 for i in tqdm(reversed(range(0, self.timesteps)), desc='Sampling loop', total=self.timesteps):
-                    img = self.p_sample(img, torch.full((batch_size,), i, device=self.device, dtype=torch.long), c_copy, w)
+                    img = self.p_sample(img, torch.full((batch_size,), i, device=self.device, dtype=torch.long), c, w)
                     imgs.append(img.cpu().numpy())
                 return imgs
         else:
