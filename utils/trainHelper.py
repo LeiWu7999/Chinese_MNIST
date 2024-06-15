@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 from tqdm.auto import tqdm
-
+import IPython
+e = IPython.embed
 
 class EarlyStopping:
     def __init__(self, patience=7, verbose=False, delta=0):
@@ -156,7 +157,7 @@ class SimpleDiffusionTrainer(TrainerBase):
                 # Algorithm 1 line 3: sample t uniformally for every example in the batch
                 t = torch.randint(0, self.timesteps, (batch_size,), device=self.device).long()
 
-                loss = model(mode="train", x_start=features, t=t, c=labels, loss_type="huber")
+                loss = model(mode="train", x_0=features, t=t, c=labels, loss_type="l2")
                 losses.append(loss)
 
                 self.optimizer.zero_grad()

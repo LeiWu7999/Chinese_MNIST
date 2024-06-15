@@ -96,9 +96,9 @@ class LinearAttention(nn.Module):
         k = k.softmax(dim=-1)
 
         q = q * self.scale
-        context = torch.einsum("b h d n, b h e n -> b h d e", k, v)
+        context = einsum("b h d n, b h e n -> b h d e", k, v)
 
-        out = torch.enisum("b h d e, b h d n -> b h e n", context, q)
+        out = einsum("b h d e, b h d n -> b h e n", context, q)
         out = rearrange(out, "b h c (x y) -> b (h c) x y", h=self.heads, x=h, y=w)
         return self.to_out(out)
 
@@ -115,7 +115,7 @@ class PreNorm(nn.Module):
 
 
 class Unet(nn.Module):
-    def __init__(self, dim, cond_dim=16, init_dim=None, out_dim=None, dim_mults=(1, 2, 4, 8),
+    def __init__(self, dim, cond_dim=17, init_dim=None, out_dim=None, dim_mults=(1, 2, 4, 8),
                  channels=3, self_condition=False, resnet_block_groups=4):
         super().__init__()
         self.channels = channels
@@ -132,16 +132,17 @@ class Unet(nn.Module):
 
         # time embeddings
         time_dim = dim * 4
+        half_time_dim = dim * 2
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(dim),
-            nn.Linear(dim, time_dim / 2),
+            nn.Linear(dim, half_time_dim),
             nn.GELU(),
-            nn.Linear(time_dim, time_dim / 2),
+            nn.Linear(half_time_dim, half_time_dim),
         )
 
         # condition embeddings
         self.cond_dim = cond_dim
-        self.cond_emb_layer = nn.Embedding(cond_dim, time_dim / 2)
+        self.cond_emb_layer = nn.Embedding(cond_dim, half_time_dim)
 
         # layers
         self.downs = nn.ModuleList([])
@@ -153,8 +154,8 @@ class Unet(nn.Module):
             self.downs.append(
                 nn.ModuleList(
                     [
-                        block_class(dim_in, dim_in, time_emb_dim=time_dim),
-                        block_class(dim_in, dim_in, time_emb_dim=time_dim),
+                        block_class(dim_in, dim_in, time_cond_emb_dim=time_dim),
+                        block_class(dim_in, dim_in, time_cond_emb_dim=time_dim),
                         Residual(PreNorm(dim_in, LinearAttention(dim_in))),
                         Downsample(dim_in, dim_out)
                         if not is_last
@@ -164,17 +165,17 @@ class Unet(nn.Module):
             )
 
         mid_dim = dims[-1]
-        self.mid_block1 = block_class(mid_dim, mid_dim, time_emb_dim=time_dim)
+        self.mid_block1 = block_class(mid_dim, mid_dim, time_cond_emb_dim=time_dim)
         self.mid_attn = Residual(PreNorm(mid_dim, Attention(mid_dim)))
-        self.mid_block2 = block_class(mid_dim, mid_dim, time_emb_dim=time_dim)
+        self.mid_block2 = block_class(mid_dim, mid_dim, time_cond_emb_dim=time_dim)
 
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out)):
             is_last = ind >= (num_resolutions - 1)
             self.ups.append(
                 nn.ModuleList(
                     [   # block_class 输入维度为dim_out+dim_in 是为了接受downs对应层的skip connetion
-                        block_class(dim_out + dim_in, dim_out, time_emb_dim=time_dim),
-                        block_class(dim_out + dim_in, dim_out, time_emb_dim=time_dim),
+                        block_class(dim_out + dim_in, dim_out, time_cond_emb_dim=time_dim),
+                        block_class(dim_out + dim_in, dim_out, time_cond_emb_dim=time_dim),
                         Residual(PreNorm(dim_out, LinearAttention(dim_out))),
                         Upsample(dim_out, dim_in)
                         if not is_last
@@ -184,10 +185,10 @@ class Unet(nn.Module):
             )
 
         self.out_dim = default(out_dim, channels)
-        self.final_res_block = block_class(dim * 2, dim, time_emb_dim=time_dim)
+        self.final_res_block = block_class(dim * 2, dim, time_cond_emb_dim=time_dim)
         self.final_conv = nn.Conv2d(dim, self.out_dim, 1)
 
-    def forward(self, x, time, x_self_cond=None, condition=None):
+    def forward(self, x, time, condition, x_self_cond=None):
         if self.self_condition:
             x_self_cond = default(x_self_cond, lambda: torch.zeros_like(x))
             x = torch.cat((x_self_cond, x), dim=1)
@@ -195,6 +196,7 @@ class Unet(nn.Module):
         x = self.init_conv(x)
         r = x.clone()
         t = self.time_mlp(time)
+
         c = self.cond_emb_layer(condition)
         tc = torch.cat((t, c), dim=-1)
         h = []
@@ -224,5 +226,5 @@ class Unet(nn.Module):
             x = upsample(x)
 
         x = torch.cat((x, r), dim=1)
-        x = self.final_res_block(x, t, c)
+        x = self.final_res_block(x, tc)
         return self.final_conv(x)

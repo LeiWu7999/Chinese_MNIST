@@ -6,6 +6,8 @@ from tqdm.auto import tqdm
 from inspect import isfunction
 from einops.layers.torch import Rearrange
 from torchvision.transforms import Compose, Lambda, ToPILImage
+import IPython
+e = IPython.embed
 
 def extract(tensor, idx, x_shape):
     # 从tensor最后一维中索引idx对应元素
@@ -47,7 +49,7 @@ class SinusoidalPositionEmbeddings(nn.Module):
         embeddings = time[:, None] * embeddings[None, :]
         sin_embeddings = embeddings.sin()
         cos_embeddings = embeddings.cos()
-        interleaved_embeddings = torch.zeros_like((embeddings.size(0), self.dim), device=device)
+        interleaved_embeddings = torch.zeros((embeddings.size(0), self.dim), device=device)
         interleaved_embeddings[:, 0::2] = sin_embeddings
         interleaved_embeddings[:, 1::2] = cos_embeddings
 
@@ -77,9 +79,3 @@ def Upsample(dim_in, dim_out=None):
         nn.Conv2d(dim_in, default(dim_out, dim_in), 3, padding=1),
     )
 
-reverse_transform = Compose([
-     Lambda(lambda t: t.permute(1, 2, 0)), # CHW to HWC
-     Lambda(lambda t: t * 255.),
-     Lambda(lambda t: t.numpy().astype(np.uint8)),
-     ToPILImage(),
-])

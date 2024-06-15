@@ -1,7 +1,10 @@
 import os
 from PIL import Image
+import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+import IPython
+e = IPython.embed
 
 
 class Chinese_MNIST(DataLoader):
@@ -13,7 +16,7 @@ class Chinese_MNIST(DataLoader):
                 transforms.Normalize((0.5,), (0.5,))
             ]) if transform else None
         # Dataset shape is (100, 10, 15)
-        data_dir = os.path.join(root_dir, '../dataset/data')
+        data_dir = os.path.join(root_dir, 'dataset/data')
         for img_name in os.listdir(data_dir):
             img_path = os.path.join(data_dir, img_name)
             self.image_paths.append(img_path)

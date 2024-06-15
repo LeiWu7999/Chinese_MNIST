@@ -16,12 +16,16 @@ from utils.trainHelper import SimpleDiffusionTrainer
 root_dir = os.path.abspath(os.path.dirname(__file__))
 image_dir = os.path.join(root_dir, 'dataset\\data')
 
+"""
+Tuning hyperparameters here
+"""
 img_size = 64
 channels = 1
 batch_size = 64
-num_labels = 16
+num_labels = 17
 timesteps = 1000
 lr = 1e-3
+w = 4
 epoches = 20
 transform = False
 var_scheduler = "linear_beta_schedule"
@@ -62,22 +66,19 @@ if not os.path.exists(saved_path):
     os.makedirs(saved_path)
 
 # 训练好的模型加载，如果模型是已经训练好的，则可以将下面两行代码取消注释
-# best_model_path = saved_path + '/' + 'BestModel.pth'
-# Model.load_state_dict(torch.load(best_model_path))
+best_model_path = saved_path + '/' + 'BestModel.pth'
+Model.load_state_dict(torch.load(best_model_path))
 
 # 如果模型已经训练好则注释下面这行代码，反之则注释上面两行代码
-Model = Trainer.train(Model, model_save_path=saved_path)
+# Model = Trainer(Model, model_save_path=saved_path)
 
-labels = torch.randint(0, num_labels, size=(64,))
-c = torch.zeros((len(labels), num_labels))
-for i, label in enumerate(labels):
-    c[i][label] = 1
+labels = torch.randint(0, 16, size=(64,))
 
-samples = Model(mode="infer", img_size=img_size, batch_size=64, channels=channels, c=c)
+samples = Model(mode="infer", img_size=img_size, batch_size=64, channels=channels, c=labels, w=w)
 
 # 随机挑一张显示
 random_index = 1
-generated_image = samples[-1][random_index].reshape(channels, img_size, img_size)
+generated_image = samples[-1][random_index].reshape(img_size, img_size, channels)
 
 if transform:
     # 逆归一化

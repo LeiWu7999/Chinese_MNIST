@@ -21,7 +21,7 @@ class DiffusionModel(nn.Module):
         self.timesteps = timesteps
         self.betas = var_schedule_func(timesteps)
         self.alphas = 1. - self.betas
-        self.alphas_cumpord = torch.cumprod(self.alphas, dim=0)
+        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
         self.alphas_cumprod_prev = F.pad(self.alphas_cumprod[:-1], (1, 0), value=1.0)
         # 采样方差使用DDPM论文中的方差下界
         self.sample_variance = self.betas * (1. - self.alphas_cumprod_prev) / (1. - self.alphas_cumprod)
@@ -32,7 +32,7 @@ class DiffusionModel(nn.Module):
         if noise is None:
             noise = torch.randn_like(x_0)
 
-        alphas_cumprod_t = extract(self.alphas_cumpord, t, x_0.shape)
+        alphas_cumprod_t = extract(self.alphas_cumprod, t, x_0.shape)
         sqrt_alphas_cumprod_t = torch.sqrt(alphas_cumprod_t)
         sqrt_one_minus_alphas_cumprod_t = torch.sqrt(1. - sqrt_alphas_cumprod_t)
         return sqrt_alphas_cumprod_t * x_0 + sqrt_one_minus_alphas_cumprod_t * noise
@@ -57,8 +57,7 @@ class DiffusionModel(nn.Module):
     def p_sample(self, x_t, t, c, w):
 
         conditional_noise = self.net(x_t,t,c)
-        cnone = torch.zeros_like(c)
-        cnone[:, -1] = 1
+        cnone = torch.ones_like(c) * 16
         unconditional_noise = self.net(x_t,t,cnone)
         predicted_noise = (1+w) * conditional_noise - w * unconditional_noise
 
@@ -94,13 +93,14 @@ class DiffusionModel(nn.Module):
             noise = kwargs.get("noise", None)
             loss_type = kwargs.get("loss_type", "l2")
             p_unconditional = kwargs.get("p_unconditional", 0.1)
-            c_mask = torch.bernoulli(p_unconditional * torch.ones_like(c.shape[0]))
+            c_mask = torch.bernoulli(p_unconditional * torch.ones_like(c))
             c_copy = c.clone()  # 对c的副本进行操作，防止修改原始c
 
             for i in range(c_mask.shape[0]):
                 if c_mask[i] == 1:
-                    c_copy[i, :-1] = 0
-                    c_copy[i, -1] = 1
+                    c_copy[i] = 16
+
+            c_copy = c_copy.long().to(self.device)
 
             return self.loss_function(x_0=x_0, t=t, c=c_copy, noise=noise, loss_type=loss_type)
 
@@ -119,12 +119,13 @@ class DiffusionModel(nn.Module):
                     raise ValueError("img_size , batch_size , channels must be specified for generating.")
 
                 w = kwargs.get("w", 0.)
+                c_copy = c.clone().long().to(self.device)
 
                 img = torch.randn((batch_size, channels, img_size, img_size), device=self.device)
                 imgs = []
 
                 for i in tqdm(reversed(range(0, self.timesteps)), desc='Sampling loop', total=self.timesteps):
-                    img = self.p_sample(img, torch.full((batch_size,), i, device=self.device, dtype=torch.long), c, w)
+                    img = self.p_sample(img, torch.full((batch_size,), i, device=self.device, dtype=torch.long), c_copy, w)
                     imgs.append(img.cpu().numpy())
                 return imgs
         else:
