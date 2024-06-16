@@ -102,6 +102,31 @@ class LinearAttention(nn.Module):
         return self.to_out(out)
 
 
+class MLP(nn.Module):
+    def __init__(self, dim_in, hidden_dim=512):
+        super().__init__()
+        self.conv1 = nn.Conv2d(dim_in, 64, kernel_size=3, padding=1, stride=1)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.pool = nn.MaxPool2d(2, stride=2, padding=0)
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=3, padding=1, stride=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.fc1 = nn.Linear(64 * 8 * 8, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, 64 * 8 * 8)
+        self.upsample = Upsample(64, dim_in)
+
+    def forward(self, x):
+        h = F.relu(self.bn1(self.conv1(x)))
+        h = self.pool(h)
+        h = F.relu(self.bn2(self.conv2(h)))
+        h = h.view(h.size(0), -1)
+        h = F.relu(self.fc1(h))
+        h = F.relu(self.fc2(h))
+        h = h.view(h.size(0), 64, 8, 8)
+        h = self.upsample(h)
+        return h
+
+
+
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
@@ -114,8 +139,8 @@ class PreNorm(nn.Module):
 
 
 class Unet(nn.Module):
-    def __init__(self, dim, cond_dim=17, init_dim=None, out_dim=None, dim_mults=(1, 2, 4, 8),
-                 channels=3, self_condition=False, resnet_block_groups=4):
+    def __init__(self, dim, cond_dim, init_dim=None, out_dim=None, dim_mults=(1, 2, 4, 8),
+                 channels=3, self_condition=False, resnet_block_groups=4, attention=True):
         super().__init__()
         self.channels = channels
         self.self_condition = self_condition
@@ -165,7 +190,7 @@ class Unet(nn.Module):
 
         mid_dim = dims[-1]
         self.mid_block1 = block_class(mid_dim, mid_dim, time_cond_emb_dim=time_dim)
-        self.mid_attn = Residual(PreNorm(mid_dim, Attention(mid_dim)))
+        self.mid_attn = Residual(PreNorm(mid_dim, Attention(mid_dim) if attention else MLP(mid_dim)))
         self.mid_block2 = block_class(mid_dim, mid_dim, time_cond_emb_dim=time_dim)
 
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out)):

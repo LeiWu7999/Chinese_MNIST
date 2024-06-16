@@ -9,6 +9,7 @@ class DiffusionModel(nn.Module):
                  timesteps=1000,
                  beta_start=0.0001,
                  beta_end=0.02,
+                 num_labels=16,
                  device='cpu',
                  denoise_model=None
                  ):
@@ -25,6 +26,7 @@ class DiffusionModel(nn.Module):
         self.alphas_cumprod_prev = F.pad(self.alphas_cumprod[:-1], (1, 0), value=1.0)
         # 采样方差使用DDPM论文中的方差下界
         self.sample_variance = self.betas * (1. - self.alphas_cumprod_prev) / (1. - self.alphas_cumprod)
+        self.num_labels = num_labels
 
 
     def q_sample(self, x_0, t, noise=None):
@@ -56,10 +58,10 @@ class DiffusionModel(nn.Module):
 
 
     @torch.no_grad()
-    def p_sample(self, x_t, t, c, w):
+    def p_sample(self, x_t, t, c, w, max_label=15):
 
         conditional_noise = self.net(x_t, t, c)
-        cnone = torch.ones_like(c) * 16
+        cnone = torch.ones_like(c) * max_label
         unconditional_noise = self.net(x_t, t, cnone)
         predicted_noise = (1+w) * conditional_noise - w * unconditional_noise
 
@@ -100,7 +102,7 @@ class DiffusionModel(nn.Module):
 
             for i in range(c_mask.shape[0]):
                 if c_mask[i] == 1:
-                    c_copy[i] = 16
+                    c_copy[i] = self.num_labels-1
 
             c_copy = c_copy.long().to(self.device)
 
@@ -126,7 +128,8 @@ class DiffusionModel(nn.Module):
                 imgs = []
 
                 for i in tqdm(reversed(range(0, self.timesteps)), desc='Sampling loop', total=self.timesteps):
-                    img = self.p_sample(img, torch.full((batch_size,), i, device=self.device, dtype=torch.long), c, w)
+                    img = self.p_sample(img, torch.full((batch_size,), i, device=self.device, dtype=torch.long),
+                                        c, w, max_label=self.num_labels-1)
                     imgs.append(img.cpu())
                 return imgs
         else:

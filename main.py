@@ -20,11 +20,12 @@ def main(args):
     """
     -------------------------------------------Tuning hyperparameters here----------------------------------------------
     """
+    attention = False  # False : Using MLP replace attention block
     img_size = 64
     channels = 1
     batch_size = 64
     sample_batch_size = 32
-    num_labels = 17  # 总共16个字，外加一个表示无标签的情况
+    num_labels = 16  # 总共15个字，外加一个表示无标签的情况
     timesteps = 1000  # 采样步数
     lr = 1e-3   # 学习率
     loss_type = "l2"  # l1 or l2 or huber
@@ -33,9 +34,8 @@ def main(args):
     epoches = 20
     transform = True  # 是否对图像进行预处理
     var_scheduler = "cosine_beta_schedule"  # 扩散过程设方差设置策略
-    dim_mults = (1, 1, 2,)  # U-Net 上下采样缩放比例，如降采样阶段：(1,2,4,8)->图像尺寸:(不变,减半,减四倍,减八倍)
+    dim_mults = (1, 2, 2,)  # U-Net 上下采样缩放比例，如降采样阶段：(1,2,4,8)->图像尺寸:(不变,减半,减四倍,减八倍)
     save_and_sample_every = 1000  # 训练过程中每过多少步采样一次图片
-    net_dim = 64  # denoise_model dim
     """
     -------------------------------------------Tuning hyperparameters above---------------------------------------------
     """
@@ -47,15 +47,17 @@ def main(args):
                             num_workers=1)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    denoise_model = Unet(dim=net_dim,
+    denoise_model = Unet(dim=img_size,
                          cond_dim=num_labels,
                          channels=channels,
-                         dim_mults=dim_mults)
+                         dim_mults=dim_mults,
+                         attention=attention)
 
     Model = DiffusionModel(var_schedule=var_scheduler,
                            timesteps=timesteps,
                            beta_start=0.0001,
                            beta_end=0.02,
+                           num_labels=num_labels,
                            device=device,
                            denoise_model=denoise_model).to(device)
 
@@ -71,11 +73,13 @@ def main(args):
                                      channels=channels,
                                      w=w,
                                      transform=transform,
-                                     loss_type=loss_type)
+                                     loss_type=loss_type,
+                                     num_labels=num_labels)
 
+    block = 'attention' if attention else 'mlp'
     model_dir = "./ckpt"
-    setting = "imageSize{}_channels{}_dimMults{}_timeSteps{}_scheduleName{}".format(img_size, channels, dim_mults,
-                                                                                    timesteps, var_scheduler)
+    setting = "{}_dimMults{}_w{}_p{}_schedule{}_timesteps{}".format(block,dim_mults,
+                                                                 w, p_unconditional, var_scheduler, timesteps)
 
     saved_path = os.path.join(model_dir, setting)
     if not os.path.exists(saved_path):
@@ -88,7 +92,7 @@ def main(args):
         best_model_path = saved_path + '/' + 'BestModel.pth'
         Model.load_state_dict(torch.load(best_model_path))
 
-        labels = torch.randint(0, 17, size=(sample_batch_size,), dtype=torch.long, device=device)
+        labels = torch.randint(0, num_labels-1, size=(sample_batch_size,), dtype=torch.long, device=device)
 
         samples = Model(mode="infer", img_size=img_size, batch_size=sample_batch_size, channels=channels, c=labels, w=w)
         sample = samples[-1]
@@ -101,7 +105,8 @@ def main(args):
         if transform:
             # 逆归一化
             inverse_transform = transforms.Compose([
-                transforms.Normalize(mean=[-1], std=[2])  # 逆归一化公式
+                transforms.Normalize(mean=[-1], std=[2]),  # 逆归一化公式
+                transforms.Resize((img_size, img_size))
             ])
             sample = inverse_transform(sample)
 

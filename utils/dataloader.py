@@ -12,6 +12,7 @@ class Chinese_MNIST(Dataset):
         self.image_paths = []
         self.labels = []
         self.transform = transforms.Compose([
+                transforms.ToTensor(),
                 transforms.Normalize((0.5,), (0.5,))
             ]) if transform else None
         # Dataset shape is (100, 10, 15)
@@ -27,11 +28,14 @@ class Chinese_MNIST(Dataset):
 
     def __getitem__(self, idx):
         img_path = self.image_paths[idx]
-        image = transforms.ToTensor()(Image.open(img_path))
-        label = self.labels[idx]
+        image =Image.open(img_path)
 
         if self.transform:
             image = self.transform(image)
+        else:
+            image = transforms.ToTensor()(image)
+
+        label = self.labels[idx]
 
         return image, label
 

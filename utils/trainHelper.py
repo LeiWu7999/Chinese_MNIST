@@ -154,6 +154,7 @@ class SimpleDiffusionTrainer(TrainerBase):
         self.w = kwargs.get("w", 0.)
         self.transform = kwargs.get("transform", False)
         self.loss_type = kwargs.get("loss_type", "l2")
+        self.num_labels = kwargs.get("num_labels", 16)
         results_folder = Path("./training_samples")
         results_folder.mkdir(exist_ok=True)
         self.saved_dir = results_folder
@@ -188,7 +189,7 @@ class SimpleDiffusionTrainer(TrainerBase):
                 if step != 0 and step % self.save_and_sample_every == 0:
                     milestone = step // self.save_and_sample_every
                     batch_size = 4
-                    c = torch.randint(0, 17, (batch_size,), device=self.device, dtype=torch.long)
+                    c = torch.randint(0, self.num_labels, (batch_size,), device=self.device, dtype=torch.long)
 
                     samples = model(mode="infer", img_size=self.img_size,
                                     batch_size=batch_size, channels=self.channels, c=c, w=self.w)
@@ -201,6 +202,7 @@ class SimpleDiffusionTrainer(TrainerBase):
                         sample = inverse_transform(torch.from_numpy(sample))
 
                     save_image(samples, str(Path(self.saved_dir) / f'sample-{milestone}.png'), nrow=6)
+
 
         if "model_save_path" in kwargs.keys():
             self.save_best_model(model=model, path=kwargs["model_save_path"])
