@@ -6,9 +6,9 @@ from models.unet import Unet
 from utils.networkHelper import num_to_groups
 
 """
-Notice : 需要将创建一个名为 "dimMults{}_w{}_p{}_schedule{}_timesteps{}" 的文件夹，放于 "./ckpt/" 中
+Notice : 需要将创建一个名为 "{}_dimMults{}_w{}_p{}_schedule{}_timesteps{}" 的文件夹，放于 "./ckpt/" 中
          用于存放 BestModel.pth , 其中dimMults参数必须与模型训练时的设置一致，其余参数可以自行调整
-         例如：dimMults(1, 2, 2)_w4_p0.1_schedulecosine_beta_schedule_timesteps1000
+         例如：attention_dimMults(1, 2, 2)_w4_p0.1_schedulecosine_beta_schedule_timesteps1000
 """
 
 # 生成参数
